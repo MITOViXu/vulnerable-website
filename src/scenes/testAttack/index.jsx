@@ -1,162 +1,202 @@
 import React, { useState } from "react";
 import {
   Box,
+  Card,
+  CardContent,
+  CardHeader,
   useTheme,
-  Button,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
   TextField,
+  IconButton,
+  InputAdornment,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  Snackbar,
+  Alert,
+  useMediaQuery,
 } from "@mui/material";
-import { useAddAttackerMutation } from "state/api"; // Mutation to add attacker
+import { LoadingButton } from "@mui/lab";
+import { Visibility, VisibilityOff, Login } from "@mui/icons-material";
+import { useAddAttackerMutation } from "state/api";
+import { useNavigate } from "react-router-dom";
 
 const TestAttack = () => {
   const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
+  const navigate = useNavigate();
 
-  // States for managing the form and dialog
   const [open, setOpen] = useState(false);
-  const [username, setUsername] = useState(""); // State for username
-  const [password, setPassword] = useState(""); // State for password
-  const [addAttacker] = useAddAttackerMutation(); // Hook for adding attacker
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [showPwd, setShowPwd] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [snackbar, setSnackbar] = useState({
+    open: false,
+    message: "",
+    severity: "info",
+  });
 
-  // Function to open dialog
+  const [addAttacker] = useAddAttackerMutation();
+
   const handleOpen = () => setOpen(true);
-  const handleClose = () => setOpen(false);
+  const handleClose = () => !loading && setOpen(false);
+  const handleSnackbarClose = () => setSnackbar((s) => ({ ...s, open: false }));
 
-  // Function to handle form submission
-  const handleLogin = (e) => {
+  const notify = (message, severity = "info") =>
+    setSnackbar({ open: true, message, severity });
+
+  const handleLogin = async (e) => {
     e.preventDefault();
-
     if (!username || !password) {
-      alert("Nhập cả username và password");
+      notify("Vui lòng nhập tên đăng nhập & mật khẩu", "warning");
       return;
     }
 
-    // Combine username and password
-    const input_val = `${username}${password}`;
+    // Bypass AI check nếu đúng thông tin đặc biệt
+    if (username === "mtoan" && password === "123") {
+      notify("Đăng nhập thành công. Chuyển đến trang khách sạn...", "success");
+      setTimeout(() => navigate("/hotel"), 1000);
+      setOpen(false);
+      setUsername("");
+      setPassword("");
+      return;
+    }
 
-    // Send the combined input to the predict_sqli_attack API (Flask backend)
-    fetch("http://127.0.0.1:5000/predict", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ input_val: input_val }), // Send combined input
-    })
-      .then((response) => response.json())
-      .then((data) => {
-        if (data.attack_detected) {
-          console.log("Phát hiện SQL injection!");
-
-          // Fetch IP address
-          fetch("https://api.ipify.org?format=json")
-            .then((response) => response.json())
-            .then((ipData) => {
-              const ip = ipData.ip;
-              console.log("User IP:", ip);
-
-              // Fetch location based on IP
-              fetch(`http://ip-api.com/json/${ip}`)
-                .then((response) => response.json())
-                .then((locationData) => {
-                  const { lat, lon } = locationData;
-                  console.log("Location: Latitude:", lat, "Longitude:", lon);
-
-                  // Create attacker payload
-                  const attackerData = {
-                    ip: ip,
-                    location: {
-                      longitude: lon,
-                      latitude: lat,
-                    },
-                    devices: [
-                      {
-                        ip: "192.168.48.128", // Example device IP
-                        port: 3000, // Example device port
-                      },
-                    ],
-                  };
-
-                  // Add attacker to the database
-                  addAttacker(attackerData)
-                    .then((response) => {
-                      console.log("Thêm kẻ tấn công:", response);
-                      alert(`Attacker được thêm với địa chỉ IP: ${ip}`);
-                      setOpen(false); // Close the dialog after success
-                      setUsername("");
-                      setPassword("");
-                    })
-                    .catch((error) => {
-                      console.error("Xảy ra lỗi khi thêm Attacker:", error);
-                      alert("Xảy ra lỗi khi thêm Attacker");
-                    });
-                })
-                .catch((error) => {
-                  console.error("Lỗi xác định vị trí:", error);
-                  alert("Lỗi xác định vị trí");
-                });
-            })
-            .catch((error) => {
-              console.error("Lỗi xác định IP:", error);
-              alert("Lỗi xác định IP");
-            });
-        } else {
-          alert("Không phát hiện SQL injection.");
-          setUsername("");
-          setPassword("");
-          setOpen(false);
-        }
-      })
-      .catch((error) => {
-        console.error("Lỗi AI:", error);
-        alert("Lỗi AI");
+    setLoading(true);
+    try {
+      const res = await fetch("http://127.0.0.1:5000/predict", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ input_val: `${username}${password}` }),
       });
+      const data = await res.json();
+
+      if (data.attack_detected) {
+        const ipData = await fetch("https://api.ipify.org?format=json").then(
+          (r) => r.json()
+        );
+        const attackerData = {
+          ip: ipData.ip,
+          status: "active",
+          devices: [{ ip: "192.168.48.128", port: 3000 }],
+        };
+        await addAttacker(attackerData);
+        notify(`Phát hiện SQLi! IP ${ipData.ip} đã được ghi nhận.`, "success");
+      } else {
+        notify("Tên đăng nhập hoặc mật khẩu không chính xác!", "error");
+      }
+
+      setOpen(false);
+      setUsername("");
+      setPassword("");
+    } catch (err) {
+      console.error(err);
+      notify("Đã xảy ra lỗi, vui lòng thử lại.", "error");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
-    <Box m="1.5rem 2.5rem">
-      <Button
-        variant="contained"
-        color="primary"
-        onClick={handleOpen}
-        sx={{ mb: 2, mt: 2 }}
-      >
-        Đăng nhập
-      </Button>
+    <>
+      {/* Login Trigger */}
+      <Box display="flex" justifyContent="center" mt={4}>
+        <LoadingButton
+          variant="contained"
+          size={isMobile ? "medium" : "large"}
+          startIcon={<Login />}
+          onClick={handleOpen}
+        >
+          Đăng nhập
+        </LoadingButton>
+      </Box>
 
-      {/* Dialog for Login */}
-      <Dialog open={open} onClose={handleClose}>
-        <DialogTitle>Login</DialogTitle>
-        <DialogContent>
-          <TextField
-            autoFocus
-            margin="dense"
-            label="Tên"
-            type="text"
-            fullWidth
-            value={username}
-            onChange={(e) => setUsername(e.target.value)}
-          />
-          <TextField
-            margin="dense"
-            label="Mật khẩu"
-            type="password" // Changed to "password" for security
-            fullWidth
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-          />
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={handleClose} color="secondary">
-            Hủy
-          </Button>
-          <Button onClick={handleLogin} sx={{ color: "#74f7ba" }}>
-            Đăng nhập
-          </Button>
-        </DialogActions>
+      {/* Login Dialog */}
+      <Dialog open={open} onClose={handleClose} fullWidth maxWidth="xs">
+        <DialogTitle sx={{ textAlign: "center", fontWeight: 600 }}>
+          Đăng nhập
+        </DialogTitle>
+        <Box component="form" onSubmit={handleLogin}>
+          <DialogContent>
+            <Card elevation={0}>
+              <CardHeader
+                title="Thông tin tài khoản"
+                titleTypographyProps={{ align: "center", variant: "subtitle1" }}
+                sx={{ pb: 1 }}
+              />
+              <CardContent sx={{ pt: 0 }}>
+                <TextField
+                  label="Tên đăng nhập"
+                  fullWidth
+                  margin="dense"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  autoFocus
+                />
+                <TextField
+                  label="Mật khẩu"
+                  fullWidth
+                  margin="dense"
+                  type={showPwd ? "text" : "password"}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  InputProps={{
+                    endAdornment: (
+                      <InputAdornment position="end">
+                        <IconButton
+                          onClick={() => setShowPwd((s) => !s)}
+                          edge="end"
+                        >
+                          {showPwd ? <VisibilityOff /> : <Visibility />}
+                        </IconButton>
+                      </InputAdornment>
+                    ),
+                  }}
+                />
+              </CardContent>
+            </Card>
+          </DialogContent>
+          <DialogActions sx={{ px: 3, pb: 3 }}>
+            <LoadingButton
+              variant="outlined"
+              color="secondary"
+              onClick={handleClose}
+              loading={loading}
+            >
+              Huỷ
+            </LoadingButton>
+            <LoadingButton
+              type="submit"
+              variant="contained"
+              loading={loading}
+              sx={{
+                background: `linear-gradient(135deg, ${theme.palette.primary.main} 0%, ${theme.palette.secondary.main} 100%)`,
+                color: "#fff",
+              }}
+            >
+              Đăng nhập
+            </LoadingButton>
+          </DialogActions>
+        </Box>
       </Dialog>
-    </Box>
+
+      {/* Snackbar Notifications */}
+      <Snackbar
+        open={snackbar.open}
+        autoHideDuration={4000}
+        onClose={handleSnackbarClose}
+        anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
+      >
+        <Alert
+          onClose={handleSnackbarClose}
+          severity={snackbar.severity}
+          sx={{ width: "100%" }}
+        >
+          {snackbar.message}
+        </Alert>
+      </Snackbar>
+    </>
   );
 };
 

@@ -6,6 +6,7 @@ import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { themeSettings } from "theme";
 
 import TestAttack from "scenes/testAttack";
+import Hotel from "scenes/hotel";
 
 function App() {
   const mode = useSelector((state) => state.global.mode);
@@ -18,6 +19,7 @@ function App() {
           <CssBaseline />
           <Routes>
             <Route path="/" element={<TestAttack />} />
+            <Route path="/hotel" element={<Hotel />} />
           </Routes>
         </ThemeProvider>
       </BrowserRouter>

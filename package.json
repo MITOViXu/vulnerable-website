@@ -6,6 +6,7 @@
     "@emotion/react": "^11.10.5",
     "@emotion/styled": "^11.10.5",
     "@mui/icons-material": "^5.10.15",
+    "@mui/lab": "^5.0.0-alpha.125",
     "@mui/material": "^5.10.15",
     "@mui/x-data-grid": "^5.17.13",
     "@nivo/bar": "^0.80.0",
@@ -40,6 +41,7 @@
       "react-app/jest"
     ]
   },
+  "license": "MIT",
   "browserslist": {
     "production": [
       ">0.2%",
