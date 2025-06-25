@@ -38,7 +38,7 @@ import {
   Report,
   CheckCircle,
 } from "@mui/icons-material";
-import { useAddAttackerMutation } from "state/api";
+import { useSetAttackerByIpPortMutation } from "state/api";
 import { useDispatch } from "react-redux";
 import { loginSuccess } from "state/authSlice";
 import { useNavigate } from "react-router-dom";
@@ -63,15 +63,17 @@ const TestAttack = () => {
   // Enhanced notification states
   const [sqlInjectionAlert, setSqlInjectionAlert] = useState({
     open: false,
-    ip: "",
+    publicIp: "",
+    privateIp: "192.168.56.1",
     details: "",
+    deviceBlocked: null,
   });
   const [loginErrorAlert, setLoginErrorAlert] = useState({
     open: false,
     attempts: 0,
   });
 
-  const [addAttacker] = useAddAttackerMutation();
+  const [setAttackerByIpPort] = useSetAttackerByIpPortMutation();
 
   const handleOpen = () => setOpen(true);
   const handleClose = () => !loading && setOpen(false);
@@ -131,20 +133,32 @@ const TestAttack = () => {
       const data = await res.json();
 
       if (data.attack_detected) {
+        // Lấy IP public của kẻ tấn công
         const ipData = await fetch("https://api.ipify.org?format=json").then(
           (r) => r.json()
         );
-        const attackerData = {
-          ip: ipData.ip,
-          status: "active",
-          devices: [{ ip: "192.168.48.128", port: 3000 }],
-        };
-        await addAttacker(attackerData);
 
-        // Enhanced SQL Injection Alert
+        // Gọi API để set attacker với IP và port cố định
+        const attackerData = {
+          ip: "192.168.56.1",
+          port: 5050,
+        };
+
+        try {
+          await setAttackerByIpPort(attackerData).unwrap();
+          console.log(
+            "✅ Device đã được đánh dấu là bị tấn công:",
+            attackerData
+          );
+        } catch (apiError) {
+          console.error("❌ Lỗi khi gọi API set-attacker:", apiError);
+        }
+
+        // Enhanced SQL Injection Alert với cả IP public và private
         setSqlInjectionAlert({
           open: true,
-          ip: ipData.ip,
+          publicIp: ipData.ip,
+          privateIp: "192.168.56.1",
           details: `Input: "${username}${password.substring(0, 10)}${
             password.length > 10 ? "..." : ""
           }"`,
@@ -206,7 +220,7 @@ const TestAttack = () => {
               color: "#FFFFFF",
               textShadow: "2px 2px 8px rgba(0,0,0,0.7)",
               mb: 3,
-              fontSize: { xs: "1.5rem", md: "2rem" },
+              fontSize: { xs: "2.5rem", md: "3.5rem" },
               letterSpacing: "0.02em",
             }}
           >
@@ -214,7 +228,7 @@ const TestAttack = () => {
           </Typography>
           <Chip
             icon={<Shield sx={{ color: "#FFFFFF !important" }} />}
-            label="Được bảo vệ bởi Injex Watch"
+            label="Được bảo vệ bởi AI Security"
             variant="filled"
             sx={{
               mt: 1,
@@ -523,11 +537,27 @@ const TestAttack = () => {
                 fontWeight={600}
                 color="error.main"
               >
-                🌐 Địa chỉ IP tấn công:
+                🌐 Địa chỉ IP Public tấn công:
               </Typography>
               <Chip
-                label={sqlInjectionAlert.ip}
+                label={sqlInjectionAlert.publicIp}
                 color="error"
+                variant="outlined"
+                sx={{ fontFamily: "monospace", fontSize: "1rem", mb: 1 }}
+              />
+            </Box>
+
+            <Box>
+              <Typography
+                variant="subtitle1"
+                fontWeight={600}
+                color="warning.main"
+              >
+                🏠 Địa chỉ IP Private mục tiêu:
+              </Typography>
+              <Chip
+                label={`${sqlInjectionAlert.privateIp}:5050`}
+                color="warning"
                 variant="outlined"
                 sx={{ fontFamily: "monospace", fontSize: "1rem" }}
               />
@@ -546,6 +576,7 @@ const TestAttack = () => {
                 sx={{
                   fontFamily: "monospace",
                   bgcolor: "black",
+                  color: "white",
                   p: 2,
                   borderRadius: 1,
                   wordBreak: "break-all",
